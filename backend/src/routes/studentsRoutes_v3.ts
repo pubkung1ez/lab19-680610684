@@ -1,5 +1,9 @@
 import { Router, type Request, type Response } from "express";
-import { zStudentPostBody, zStudentId } from "../libs/zodValidators.js";
+import {
+  zStudentPostBody,
+  zStudentPutBody,
+  zStudentId,
+} from "../libs/zodValidators.js";
 
 import type { Student, CustomRequest } from "../libs/types.js";
 
@@ -177,6 +181,117 @@ router.post(
       return res.status(500).json({
         success: false,
         message: "Somthing is wrong, please try again",
+        error: err,
+      });
+    }
+  },
+);
+
+// PUT /api/v3/students, body = {studentId, firstName?, lastName?, ...}
+router.put(
+  "/",
+  authenticateToken,
+  checkRoles,
+  async (req: CustomRequest, res: Response) => {
+    try {
+      const result = zStudentPutBody.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: "Validation failed",
+          errors: result.error.issues[0]?.message,
+        });
+      }
+
+      const { studentId, firstName, lastName, program, interests, emails } =
+        result.data;
+      const student = await prisma.student.findUnique({
+        where: { studentId },
+      });
+      if (!student) {
+        return res.status(404).json({
+          success: false,
+          message: `Student ${studentId} does not exists`,
+        });
+      }
+
+      if (
+        req.user?.role === "STUDENT" &&
+        req.user.studentId !== student.studentId
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Forbidden access",
+        });
+      }
+
+      const updated = await prisma.student.update({
+        where: { studentId },
+        data: {
+          ...(firstName != null && { firstName }),
+          ...(lastName != null && { lastName }),
+          ...(program != null && { program }),
+          ...(interests != null && { interests }),
+          ...(emails != null && { emails }),
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: `Student ${studentId} has been updated successfully`,
+        data: updated,
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Something is wrong, please try again",
+        error: err,
+      });
+    }
+  },
+);
+
+// DELETE /api/v3/students, body = {studentId}
+router.delete(
+  "/",
+  authenticateToken,
+  checkRoleAdmin,
+  async (req: CustomRequest, res: Response) => {
+    try {
+      const result = zStudentId.safeParse(req.body?.studentId);
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: "Validation failed",
+          errors: result.error.issues[0]?.message,
+        });
+      }
+      const studentId = result.data;
+      const student = await prisma.student.findUnique({
+        where: { studentId },
+      });
+      if (!student) {
+        return res.status(404).json({
+          success: false,
+          message: `Student ${studentId} does not exists`,
+        });
+      }
+
+      await prisma.$transaction([
+        prisma.file.deleteMany({ where: { studentId } }),
+        prisma.enrollment.deleteMany({ where: { studentId } }),
+        prisma.student.delete({ where: { studentId } }),
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        message: `Student ${studentId} has been deleted successfully`,
+        data: student,
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Something is wrong, please try again",
         error: err,
       });
     }

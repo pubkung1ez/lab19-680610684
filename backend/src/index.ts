@@ -26,7 +26,10 @@ const port = process.env.PORT || 3000;
 // ตั้งค่า origin ได้หลายค่าคั่นด้วย "," ผ่าน CORS_ORIGIN ใน .env
 app.use(
   cors({
-    origin: (process.env.CORS_ORIGIN || "http://localhost:5173").split(","),
+    origin: (process.env.CORS_ORIGIN ||
+      "http://localhost:5173,http://127.0.0.1:5173")
+      .split(",")
+      .map((origin) => origin.trim()),
   }),
 );
 
